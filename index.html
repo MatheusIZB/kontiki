@@ -199,6 +199,13 @@
   .rv{opacity:0;transform:translateY(26px)}
   .rv.in{opacity:1;transform:none;transition:opacity .7s var(--ease),transform .7s var(--ease)}
 
+  /* camada premium: aurora WebGL + sublinhado desenhado */
+  #fx{position:absolute;inset:0;z-index:1;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 1.4s ease;display:block}
+  #fx.on{opacity:.6}
+  .ac.mkw{position:relative;display:inline-block}
+  .ac .uline{position:absolute;left:-.02em;right:-.02em;bottom:-.14em;width:calc(100% + .04em);height:.42em;color:var(--acento);overflow:visible;pointer-events:none}
+  .btn.mag{will-change:transform}
+
   @media(max-width:819px){
     .top .desk{display:none} .dock{display:flex}
     .hero{padding-top:5rem} .hero h1{font-size:clamp(2.7rem,12vw,4.4rem)}
@@ -219,12 +226,13 @@
 
 <!-- HERO -->
 <section class="hero" id="hero">
+  <canvas id="fx" aria-hidden="true"></canvas>
   <div class="wrap">
     <div class="hero-copy">
       <span class="pill"><span class="lv"></span>Restaurante · Lisboa</span>
       <h1>
         <span class="row"><span>À mesa,</span></span>
-        <span class="row"><span class="ac">como em casa.</span></span>
+        <span class="row"><span class="ac mkw" id="heroAcc">como em casa.<svg class="uline" viewBox="0 0 300 14" preserveAspectRatio="none" aria-hidden="true"><path d="M3 9 C 55 3, 110 13, 165 7 S 250 4, 297 9" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/></svg></span></span>
       </h1>
       <p class="hero-sub">Cozinha honesta, ingredientes frescos e o tempo certo. Um lugar para voltar — e trazer quem gostas.</p>
       <div class="hero-actions">
@@ -440,6 +448,130 @@
   if(!reduce && "IntersectionObserver" in window){
     var io2=new IntersectionObserver(function(es){es.forEach(function(e){ if(e.isIntersecting){ animateNum(e.target); io2.unobserve(e.target); } });},{threshold:.6});
     nums.forEach(function(el){io2.observe(el);});
+  }
+})();
+</script>
+
+<!-- CAMADA PREMIUM: GSAP + ScrollTrigger + anime.js + Lenis + three.js (progressiva, desktop-aware) -->
+<script>
+(function(){
+  var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduce) return;
+  var desktop=window.matchMedia("(min-width:900px) and (pointer:fine)").matches;
+  var CDN={
+    gsap:"https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js",
+    st:"https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js",
+    anime:"https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js",
+    lenis:"https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"
+  };
+  function load(src){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;s.async=true;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+  function hex2rgb(h){h=(h||"").trim().replace("#","");if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var n=parseInt(h,16);if(isNaN(n)||h.length<6)return null;return[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255];}
+  function cssVar(name){return getComputedStyle(document.documentElement).getPropertyValue(name);}
+
+  window.addEventListener("load",function(){ setTimeout(boot,250); });
+
+  function boot(){
+    Promise.all([load(CDN.gsap),load(CDN.st),load(CDN.anime)]).then(function(){
+      if(!window.gsap)return;
+      gsap.registerPlugin(ScrollTrigger);
+      drawUnderline();
+      gsapEnhance();
+      if(desktop){ load(CDN.lenis).then(initLenis).catch(function(){}); initThree(); }
+    }).catch(function(){});
+  }
+
+  // anime.js — desenha o sublinhado sob a palavra de destaque do hero
+  function drawUnderline(){
+    try{
+      var p=document.querySelector("#heroAcc .uline path"); if(!p||!window.anime)return;
+      var len=p.getTotalLength(); p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
+      anime({targets:p,strokeDashoffset:[len,0],duration:1100,delay:650,easing:"easeInOutSine"});
+      // sublinhados dos títulos de secção ao entrarem
+      gsap.utils.toArray("#servicos .head h2,#prova .head h2,#galeria .head h2").forEach(function(h){
+        ScrollTrigger.create({trigger:h,start:"top 80%",once:true,onEnter:function(){ anime({targets:h,opacity:[.001,1],duration:1}); }});
+      });
+    }catch(e){}
+  }
+
+  // GSAP — parallax e botões magnéticos (só desktop via matchMedia)
+  function gsapEnhance(){
+    var mm=gsap.matchMedia();
+    mm.add("(min-width:900px) and (pointer:fine)",function(){
+      // parallax do cartão do hero
+      var himg=document.querySelector(".hero-visual .frame img");
+      if(himg){ gsap.set(himg,{scale:1.12}); gsap.to(himg,{yPercent:6,ease:"none",scrollTrigger:{trigger:"#hero",start:"top top",end:"bottom top",scrub:true}}); }
+      // números gigantes das secções
+      gsap.utils.toArray(".num").forEach(function(el){
+        var sec=el.closest("section"); if(!sec)return;
+        gsap.fromTo(el,{yPercent:-14},{yPercent:14,ease:"none",scrollTrigger:{trigger:sec,start:"top bottom",end:"bottom top",scrub:true}});
+      });
+      // primeira imagem grande da galeria
+      var g0=document.querySelector(".gcard:first-child img");
+      if(g0){ gsap.set(g0,{scale:1.12}); gsap.to(g0,{yPercent:6,ease:"none",scrollTrigger:{trigger:"#galeria",start:"top bottom",end:"bottom top",scrub:true}}); }
+      // botões magnéticos
+      var mags=document.querySelectorAll(".hero-actions .btn-acc,.cta-final .btn-acc,.top .btn-acc");
+      var offs=[];
+      mags.forEach(function(b){
+        b.classList.add("mag");
+        var xT=gsap.quickTo(b,"x",{duration:.4,ease:"power3"}),yT=gsap.quickTo(b,"y",{duration:.4,ease:"power3"});
+        function mv(e){var r=b.getBoundingClientRect();xT((e.clientX-(r.left+r.width/2))*.35);yT((e.clientY-(r.top+r.height/2))*.4);}
+        function lv(){xT(0);yT(0);}
+        b.addEventListener("mousemove",mv);b.addEventListener("mouseleave",lv);
+        offs.push(function(){b.removeEventListener("mousemove",mv);b.removeEventListener("mouseleave",lv);gsap.set(b,{x:0,y:0});});
+      });
+      return function(){ offs.forEach(function(f){f();}); };
+    });
+  }
+
+  // Lenis — smooth scroll buttery (desktop)
+  function initLenis(){
+    try{
+      if(!window.Lenis)return;
+      var lenis=new Lenis({duration:1.05,easing:function(t){return Math.min(1,1.001-Math.pow(2,-10*t));},smoothWheel:true});
+      lenis.on("scroll",ScrollTrigger.update);
+      gsap.ticker.add(function(t){lenis.raf(t*1000);});
+      gsap.ticker.lagSmoothing(0);
+    }catch(e){}
+  }
+
+  // three.js — aurora shader subtil atrás do hero (1 draw call, DPR travado, pausa fora de vista)
+  function initThree(){
+    var cv=document.getElementById("fx"); var hero=document.getElementById("hero"); if(!cv||!hero)return;
+    import("https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js").then(function(THREE){
+      var acc=hex2rgb(cssVar("--acento"))||[.83,.64,.29];
+      var dark=hex2rgb(cssVar("--primaria-3"))||hex2rgb(cssVar("--primaria"))||[.06,.08,.12];
+      var renderer=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:false,powerPreference:"low-power"});
+      renderer.setClearColor(0x000000,0);
+      var dpr=Math.min(1.5,window.devicePixelRatio||1); renderer.setPixelRatio(dpr);
+      var scene=new THREE.Scene();
+      var uni={uT:{value:0},uA:{value:new THREE.Vector3(acc[0],acc[1],acc[2])},uB:{value:new THREE.Vector3(dark[0],dark[1],dark[2])},uR:{value:new THREE.Vector2(1,1)}};
+      var mat=new THREE.ShaderMaterial({transparent:true,uniforms:uni,
+        vertexShader:"varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}",
+        fragmentShader:[
+          "precision mediump float;varying vec2 vUv;uniform float uT;uniform vec3 uA;uniform vec3 uB;uniform vec2 uR;",
+          "float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}",
+          "float n(vec2 p){vec2 i=floor(p),f=fract(p);float a=h(i),b=h(i+vec2(1,0)),c=h(i+vec2(0,1)),d=h(i+vec2(1,1));vec2 u=f*f*(3.-2.*f);return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}",
+          "float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*n(p);p*=2.;a*=.5;}return v;}",
+          "void main(){vec2 uv=vUv;uv.x*=uR.x/uR.y;float t=uT*.045;",
+          "float f=fbm(uv*2.4+vec2(t,t*.6));float f2=fbm(uv*1.7-vec2(t*.5,t*.3));",
+          "float glow=smoothstep(.25,.95,f);glow*=smoothstep(1.05,.15,vUv.y+f2*.35);",
+          "vec3 col=mix(uB,uA,glow);float al=glow*.55;gl_FragColor=vec4(col,al);}"
+        ].join("\n")
+      });
+      var quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),mat); scene.add(quad);
+      function size(){var w=hero.clientWidth,hh=hero.clientHeight;renderer.setSize(w,hh,false);uni.uR.value.set(w,hh);}
+      size(); window.addEventListener("resize",size,{passive:true});
+      cv.classList.add("on");
+      var vis=true,running=true,t0=null;
+      var cam=new THREE.Camera(); // PlaneGeometry 2x2 já em clip-space; câmara dummy só para render()
+      function loop(t){ if(!running)return; if(!t0)t0=t; uni.uT.value=(t-t0)/1000; renderer.render(scene,cam); requestAnimationFrame(loop); }
+      function start(){ if(!running){running=true;t0=null;requestAnimationFrame(loop);} }
+      function stop(){ running=false; }
+      requestAnimationFrame(loop);
+      // pausa quando o hero sai de vista ou o separador está oculto
+      if("IntersectionObserver" in window){ new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){vis=true;start();}else{vis=false;stop();} }); },{threshold:.02}).observe(hero); }
+      document.addEventListener("visibilitychange",function(){ if(document.hidden)stop(); else if(vis)start(); });
+    }).catch(function(){ /* three indisponível → fica o gradiente CSS */ });
   }
 })();
 </script>
